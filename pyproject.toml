@@ -1,0 +1,15 @@
+[project]
+name = "real-estate-automation"
+version = "0.1.0"
+description = "MCP Server for Tecnocasa Automation"
+dependencies = [
+    "mcp[cli]>=0.1.0",
+    "sqlalchemy>=2.0.0",
+    "fpdf2>=2.7.0",
+    "fastmcp>=0.4.1",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+]
+
+[tool.uv]
+package = false
