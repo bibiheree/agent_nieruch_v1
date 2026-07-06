@@ -126,6 +126,35 @@ def find_property_for_agent_by_address(
     return None
 
 
+def get_or_create_property_for_agent(
+    db: Session,
+    *,
+    agent_id: int,
+    address: str,
+) -> Property:
+    """
+    Zwraca nieruchomosc agenta pasujaca po adresie.
+    Jesli nie ma dopasowania, tworzy nowa nieruchomosc z adresu ze spotkania/SMS.
+    """
+    clean_address = address.strip()
+    if not clean_address:
+        raise ValueError("Brak adresu nieruchomosci.")
+
+    existing = find_property_for_agent_by_address(
+        db,
+        agent_id=agent_id,
+        address_fragment=clean_address,
+    )
+    if existing:
+        return existing
+
+    new_property = Property(address=clean_address, agent_id=agent_id)
+    db.add(new_property)
+    db.commit()
+    db.refresh(new_property)
+    return new_property
+
+
 def get_agent_by_name(db: Session, agent_name: str) -> Agent | None:
     """Znajduje agenta po imieniu (nazwa kalendarza = imie agenta)."""
     needle = agent_name.strip().lower()

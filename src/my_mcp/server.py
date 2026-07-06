@@ -20,6 +20,7 @@ from src.my_mcp.services.appointment_service import (
     list_properties,
     find_property_by_address,
     find_property_for_agent_by_address,
+    get_or_create_property_for_agent,
     get_agent_by_google_calendar_id,
     resolve_agent_for_sms,
     agent_to_dict,
@@ -207,13 +208,12 @@ def process_sms_delivery(
 
         resolved_property_id = property_id
         if resolved_property_id is None and agent_id is not None and address_str:
-            matched_property = find_property_for_agent_by_address(
+            property_obj = get_or_create_property_for_agent(
                 db,
                 agent_id=agent_id,
-                address_fragment=address_str,
+                address=address_str,
             )
-            if matched_property is not None:
-                resolved_property_id = matched_property.id
+            resolved_property_id = property_obj.id
 
         if resolved_property_id is not None and agent_id is not None and scheduled_at:
             try:
@@ -244,11 +244,11 @@ def process_sms_delivery(
                     "agent": {"id": agent_id, "name": agent_name},
                     "appointment": None,
                 }
-        elif scheduled_at:
+        elif scheduled_at and agent_id is None:
             return {
                 "result": (
                     "SUKCES SMS, ale nie zapisano appointment: "
-                    f"nie znaleziono nieruchomosci agenta '{agent_name}' po adresie '{address_str}'."
+                    f"nie rozpoznano agenta '{agent_name}'."
                 ),
                 "agent": {"id": agent_id, "name": agent_name},
                 "appointment": None,
