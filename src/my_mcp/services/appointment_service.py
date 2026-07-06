@@ -108,6 +108,24 @@ def find_property_by_address(db: Session, address_fragment: str) -> Property | N
     return None
 
 
+def find_property_for_agent_by_address(
+    db: Session,
+    *,
+    agent_id: int,
+    address_fragment: str,
+) -> Property | None:
+    """Szuka nieruchomosci po adresie, ale tylko wsrod lokali danego agenta."""
+    fragment = address_fragment.strip().lower()
+    if not fragment:
+        return None
+
+    properties = db.query(Property).filter(Property.agent_id == agent_id).all()
+    for prop in properties:
+        if fragment in prop.address.lower():
+            return prop
+    return None
+
+
 def get_agent_by_name(db: Session, agent_name: str) -> Agent | None:
     """Znajduje agenta po imieniu (nazwa kalendarza = imie agenta)."""
     needle = agent_name.strip().lower()
