@@ -12,10 +12,11 @@ class Agent(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     phone = Column(String, nullable=False)
-    portal_id = Column(String, unique=True, nullable=True) # ID ogłoszeń np. Otodom, OLX
+    portal_id = Column(String, unique=True, nullable=True)  # ID ogłoszeń np. Otodom, OLX
+    google_calendar_id = Column(String, unique=True, nullable=True)  # ID kalendarza Google tego agenta
 
-    # Relacja zwrotna: agent posiada wiele nieruchomości
     properties = relationship("Property", back_populates="agent")
+    appointments = relationship("Appointment", back_populates="agent")
 
 
 class Property(Base):
@@ -37,12 +38,14 @@ class Appointment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=False)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
+    google_event_id = Column(String, unique=True, index=True, nullable=True)  # do upsert przy reschedule
     client_name = Column(String, nullable=False)
     client_phone = Column(String, nullable=False)
     scheduled_at = Column(DateTime, nullable=False)
 
-    # Powiązanie z nieruchomością
     property = relationship("Property", back_populates="appointments")
+    agent = relationship("Agent", back_populates="appointments")
 
 
 class SMSLog(Base):

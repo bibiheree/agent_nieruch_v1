@@ -6,7 +6,7 @@ import asyncio
 from datetime import datetime
 import uvicorn
 from fastmcp import FastMCP
-from fastapi import HTTPException, BackgroundTasks
+from fastapi import HTTPException, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 
 # Dodanie katalogu głównego do path, aby importy lokalne działały w kontenerze
@@ -14,6 +14,15 @@ sys.path.append(os.getcwd())
 
 from src.my_mcp.db.session import SessionLocal, engine
 from src.my_mcp.db.models import Base, SMSLog, RODOBlacklist
+from src.my_mcp.services.appointment_service import (
+    upsert_appointment,
+    list_agents,
+    list_properties,
+    find_property_by_address,
+    get_agent_by_google_calendar_id,
+    resolve_agent_for_sms,
+    agent_to_dict,
+)
 
 # Inicjalizacja FastMCP
 mcp = FastMCP("Tecnocasa-SMS-Core")
@@ -106,8 +115,11 @@ def process_sms_delivery(
         time_str: str,
         address_str: str,
         agent_name: str,
-        sms_type: str = "REMINDER"
-) -> str:
+        sms_type: str = "REMINDER",
+        property_id: int | None = None,
+        agent_id: int | None = None,
+        scheduled_at: str | None = None,
+) -> dict:
     """
     Główna orkiestracja wysyłki:
     1. Sprawdza czarną listę RODO.
@@ -127,11 +139,19 @@ def process_sms_delivery(
         )
         db.add(log_entry)
         db.commit()
-        return f"ANULOWANO: Numer {phone} znajduje się na czarnej liście RODO."
+        return {
+            "result": f"ANULOWANO: Numer {phone} znajduje się na czarnej liście RODO.",
+            "agent": {"id": agent_id, "name": agent_name},
+            "appointment": None,
+        }
 
     # 2. Idempotentność na kompozycie (google_event_id + scheduled_time)
     if check_sms_status_orm(db, google_event_id, scheduled_time, sms_type):
-        return f"ANULOWANO: Przypomnienie na godzinę {time_str} zostało już wysłane."
+        return {
+            "result": f"ANULOWANO: Przypomnienie na godzinę {time_str} zostało już wysłane.",
+            "agent": {"id": agent_id, "name": agent_name},
+            "appointment": None,
+        }
 
     # 3. Wykrywanie przebukowania (Rescheduling)
     has_prior_sms = db.query(SMSLog).filter(
@@ -148,7 +168,11 @@ def process_sms_delivery(
             agent=agent_name
         )
     except KeyError as e:
-        return f"BŁĄD SZABLONU: Brakujący klucz formatowania: {str(e)}"
+        return {
+            "result": f"BŁĄD SZABLONU: Brakujący klucz formatowania: {str(e)}",
+            "agent": {"id": agent_id, "name": agent_name},
+            "appointment": None,
+        }
 
     # Wyświetlenie ramki w konsoli Dockera
     border = "=" * 60
@@ -178,15 +202,52 @@ def process_sms_delivery(
         background_tasks.add_task(simulate_dlr_callback, new_log.id)
 
         msg_type_desc = "aktualizacja" if has_prior_sms else "standard"
-        return f"SUKCES: SMS ({msg_type_desc}) zarejestrowany jako PENDING dla {phone}."
+        appointment_data = None
+
+        if property_id is not None and agent_id is not None and scheduled_at:
+            try:
+                parsed_scheduled_at = datetime.fromisoformat(scheduled_at.replace("Z", "+00:00"))
+                appointment, created = upsert_appointment(
+                    db,
+                    google_event_id=google_event_id,
+                    property_id=property_id,
+                    agent_id=agent_id,
+                    client_name=client_name,
+                    client_phone=phone,
+                    scheduled_at=parsed_scheduled_at.replace(tzinfo=None),
+                )
+                action = "utworzono" if created else "zaktualizowano"
+                appointment_data = {
+                    "id": appointment.id,
+                    "property_id": appointment.property_id,
+                    "agent_id": appointment.agent_id,
+                    "google_event_id": appointment.google_event_id,
+                    "client_name": appointment.client_name,
+                    "client_phone": appointment.client_phone,
+                    "scheduled_at": appointment.scheduled_at.isoformat(),
+                    "action": action,
+                }
+            except Exception as e:
+                return {
+                    "result": f"SUKCES SMS, ale blad zapisu spotkania: {e}",
+                    "agent": {"id": agent_id, "name": agent_name},
+                    "appointment": None,
+                }
+
+        return {
+            "result": f"SUKCES: SMS ({msg_type_desc}) zarejestrowany jako PENDING dla {phone}.",
+            "agent": {"id": agent_id, "name": agent_name},
+            "appointment": appointment_data,
+        }
     except Exception as e:
         db.rollback()
-        return f"BŁĄD ZAPISU DO BAZY ORM: {str(e)}"
+        return {
+            "result": f"BŁĄD ZAPISU DO BAZY ORM: {str(e)}",
+            "agent": {"id": agent_id, "name": agent_name},
+            "appointment": None,
+        }
 
 
-# =====================================================================
-# NARZĘDZIA PROWADZĄCE MCP (Model Context Protocol dla Agentów AI)
-# =====================================================================
 @mcp.tool()
 def add_number_to_rodo_blacklist(phone: str) -> str:
     """Dodaje podany numer telefonu na czarną listę RODO, uniemożliwiając wysyłkę."""
@@ -205,9 +266,158 @@ def add_number_to_rodo_blacklist(phone: str) -> str:
         db.close()
 
 
+@mcp.tool()
+def upsert_appointment_tool(
+    google_event_id: str,
+    property_id: int,
+    agent_id: int,
+    client_name: str,
+    client_phone: str,
+    scheduled_at: str,
+) -> dict:
+    """Tworzy lub aktualizuje spotkanie w bazie po ID wydarzenia Google Calendar."""
+    db = SessionLocal()
+    try:
+        appointment, created = upsert_appointment(
+            db,
+            google_event_id=google_event_id,
+            property_id=property_id,
+            agent_id=agent_id,
+            client_name=client_name,
+            client_phone=client_phone,
+            scheduled_at=datetime.fromisoformat(scheduled_at.replace("Z", "+00:00")).replace(tzinfo=None),
+        )
+        return {
+            "id": appointment.id,
+            "created": created,
+            "property_id": appointment.property_id,
+            "agent_id": appointment.agent_id,
+            "google_event_id": appointment.google_event_id,
+            "client_name": appointment.client_name,
+            "client_phone": appointment.client_phone,
+            "scheduled_at": appointment.scheduled_at.isoformat(),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def check_sms_status_tool(google_event_id: str, scheduled_time: str, sms_type: str = "REMINDER") -> dict:
+    """Sprawdza, czy SMS dla danego wydarzenia i godziny zostal juz wyslany."""
+    db = SessionLocal()
+    try:
+        sent = check_sms_status_orm(db, google_event_id, scheduled_time, sms_type)
+        return {"sent": sent}
+    finally:
+        db.close()
+
+
 # =====================================================================
 # REST ENDPOINTS DLA INTEGRACJI Z n8n (rejestrowane na aplikacji FastAPI)
 # =====================================================================
+@app.get("/tools/agent_by_calendar")
+async def api_agent_by_calendar(google_calendar_id: str = Query(...)):
+    db = SessionLocal()
+    try:
+        agent = get_agent_by_google_calendar_id(db, google_calendar_id)
+        if agent is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Nie znaleziono agenta dla kalendarza: {google_calendar_id}",
+            )
+        return {"agent": agent_to_dict(agent)}
+    finally:
+        db.close()
+
+
+@app.get("/tools/agents")
+async def api_list_agents():
+    db = SessionLocal()
+    try:
+        return {"agents": list_agents(db)}
+    finally:
+        db.close()
+
+
+@app.get("/tools/properties")
+async def api_list_properties(agent_id: int | None = Query(default=None)):
+    db = SessionLocal()
+    try:
+        return {"properties": list_properties(db, agent_id=agent_id)}
+    finally:
+        db.close()
+
+
+@app.post("/tools/find_property")
+async def api_find_property(data: dict):
+    address_fragment = data.get("address_fragment")
+    if not address_fragment:
+        raise HTTPException(status_code=400, detail="Missing required 'address_fragment' parameter.")
+
+    db = SessionLocal()
+    try:
+        prop = find_property_by_address(db, address_fragment)
+        if prop is None:
+            return {"found": False, "property": None}
+        return {
+            "found": True,
+            "property": {
+                "id": prop.id,
+                "address": prop.address,
+                "agent_id": prop.agent_id,
+                "agent_name": prop.agent.name if prop.agent else None,
+            },
+        }
+    finally:
+        db.close()
+
+
+@app.post("/tools/upsert_appointment")
+async def api_upsert_appointment(data: dict):
+    required = [
+        "google_event_id",
+        "property_id",
+        "agent_id",
+        "client_name",
+        "client_phone",
+        "scheduled_at",
+    ]
+    if not all(data.get(field) for field in required):
+        raise HTTPException(status_code=400, detail=f"Missing required fields: {required}")
+
+    db = SessionLocal()
+    try:
+        appointment, created = upsert_appointment(
+            db,
+            google_event_id=data["google_event_id"],
+            property_id=int(data["property_id"]),
+            agent_id=int(data["agent_id"]),
+            client_name=data["client_name"],
+            client_phone=data["client_phone"],
+            scheduled_at=datetime.fromisoformat(
+                data["scheduled_at"].replace("Z", "+00:00")
+            ).replace(tzinfo=None),
+        )
+        return {
+            "created": created,
+            "appointment": {
+                "id": appointment.id,
+                "property_id": appointment.property_id,
+                "agent_id": appointment.agent_id,
+                "google_event_id": appointment.google_event_id,
+                "client_name": appointment.client_name,
+                "client_phone": appointment.client_phone,
+                "scheduled_at": appointment.scheduled_at.isoformat(),
+            },
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
 @app.post("/tools/check_sms_status")
 async def api_check_sms_status(data: dict):
     google_event_id = data.get("google_event_id")
@@ -234,14 +444,33 @@ async def api_mock_send_sms(data: dict, background_tasks: BackgroundTasks):
     time_str = data.get("time_str")
     address_str = data.get("address_str")
     agent_name = data.get("agent_name")
+    google_calendar_id = data.get("google_calendar_id")
     sms_type = data.get("sms_type", "REMINDER")
+    property_id = data.get("property_id")
+    agent_id = data.get("agent_id")
+    scheduled_at = data.get("scheduled_at")
 
-    if not all([google_event_id, scheduled_time, phone, client_name, time_str, address_str, agent_name]):
+    if not all([google_event_id, scheduled_time, phone, client_name, time_str, address_str]):
         raise HTTPException(status_code=400, detail="Missing required parameters in JSON body.")
+
+    if not google_calendar_id and not agent_id and not agent_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Podaj google_calendar_id (zalecane), agent_id lub agent_name.",
+        )
 
     db = SessionLocal()
     try:
-        result = process_sms_delivery(
+        agent = resolve_agent_for_sms(
+            db,
+            google_calendar_id=google_calendar_id,
+            agent_id=int(agent_id) if agent_id is not None else None,
+            agent_name=agent_name,
+        )
+        resolved_agent_name = agent.name
+        resolved_agent_id = agent.id if agent.id else (int(agent_id) if agent_id is not None else None)
+
+        response = process_sms_delivery(
             db=db,
             background_tasks=background_tasks,
             google_event_id=google_event_id,
@@ -250,10 +479,22 @@ async def api_mock_send_sms(data: dict, background_tasks: BackgroundTasks):
             client_name=client_name,
             time_str=time_str,
             address_str=address_str,
-            agent_name=agent_name,
-            sms_type=sms_type
+            agent_name=resolved_agent_name,
+            sms_type=sms_type,
+            property_id=int(property_id) if property_id is not None else None,
+            agent_id=resolved_agent_id,
+            scheduled_at=scheduled_at,
         )
-        return {"result": result}
+        response["agent"] = agent_to_dict(agent) if agent.id else {
+            "id": None,
+            "name": resolved_agent_name,
+            "phone": None,
+            "portal_id": None,
+            "google_calendar_id": google_calendar_id,
+        }
+        return response
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         db.close()
 
