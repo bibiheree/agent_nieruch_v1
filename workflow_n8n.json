@@ -1,4 +1,5 @@
 {
+  "name": "Tecnocasa SMS - 3 agenci",
   "nodes": [
     {
       "parameters": {
@@ -15,10 +16,7 @@
       "name": "Uruchom codziennie o 10:00",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [
-        -1456,
-        0
-      ]
+      "position": [-1456, 0]
     },
     {
       "parameters": {
@@ -29,16 +27,16 @@
           "mode": "list",
           "cachedResultName": "Hubert"
         },
-        "options": {}
+        "options": {
+          "timeMin": "={{ $now.startOf('day').toISO() }}",
+          "timeMax": "={{ $now.endOf('day').toISO() }}"
+        }
       },
       "id": "6c43ac84-4877-4ad6-b2e9-18b612e73bf0",
-      "name": "Pobierz dzisiejsze spotkania",
+      "name": "Kalendarz Hubert",
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.1,
-      "position": [
-        -1024,
-        0
-      ],
+      "position": [-1024, 0],
       "credentials": {
         "googleCalendarOAuth2Api": {
           "id": "fus5VXkzCPpHSzA6",
@@ -48,57 +46,65 @@
     },
     {
       "parameters": {
-        "fields": {
-          "values": [
-            {
-              "name": "client_name",
-              "stringValue": "={{ $json.client_name }}"
-            },
-            {
-              "name": "address",
-              "stringValue": "={{ $json.address }}"
-            },
-            {
-              "name": "start_time",
-              "stringValue": "={{ $json.start.dateTime }}"
-            },
-            {
-              "name": "event_id",
-              "stringValue": "={{ $json.id }}"
-            },
-            {
-              "name": "phone",
-              "stringValue": "={{ $json.phone }}"
-            },
-            {
-              "name": "agent_name",
-              "stringValue": "={{ $json.agent_name }}"
-            }
-          ]
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "96e3daa8406aa28d1ac409213099e7ac4fed7722a7750ce9f66a9cbc25a64c8d@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Wiktoria"
         },
-        "options": {}
+        "options": {
+          "timeMin": "={{ $now.startOf('day').toISO() }}",
+          "timeMax": "={{ $now.endOf('day').toISO() }}"
+        }
       },
-      "id": "21c59e0c-9f39-45af-9035-6c1d5753378c",
-      "name": "Mapuj parametry",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.2,
-      "position": [
-        -592,
-        0
-      ]
+      "id": "24370a31-284e-419e-b69b-2115c0fd1d24",
+      "name": "Kalendarz Wiktoria",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.1,
+      "position": [-1024, 208],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "fus5VXkzCPpHSzA6",
+          "name": "Google Calendar account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "// Iteracja po wszystkich pobranych elementach z kalendarza (zgodnie ze standardem n8n v1+)\nfor (const item of $input.all()) {\n  const desc = item.json.description || \"\";\n  \n  // Wyciąganie telefonu i klienta z opisu za pomocą wyrażeń regularnych\n  const phoneMatch = desc.match(/telefon:\\s*(\\+?\\d+)/i);\n  const clientMatch = desc.match(/klient:\\s*([^\\n]+)/i);\n\n  // Wyciąganie nazwy agenta z tytułu spotkania lub przypisanie domyślnego\n  const summary = item.json.summary || \"\";\n  const agentMatch = summary.match(/(?:agent|prowadzący):\\s*([^\\n]+)/i);\n\n  // Formatowanie adresu z tytułu (np. \"Spotkanie: Bracka 4\" -> \"Bracka 4\")\n  const cleanAddress = summary.replace(/Spotkanie:\\s*/i, \"\").trim();\n\n  // Zapisanie sparsowanych danych bezpośrednio do obiektu wyjściowego\n  item.json.client_phone = phoneMatch ? phoneMatch[1].trim() : \"\";\n  item.json.client_name = clientMatch ? clientMatch[1].trim() : \"Klient\";\n  item.json.agent_name = agentMatch ? agentMatch[1].trim() : \"Hubert\";\n  item.json.clean_address = cleanAddress;\n}\n\nreturn $input.all();"
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "40b798fe606a7e6fd282aa973afe976bec7e3d51aa85862bd17db569a82c9591@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Jakub"
+        },
+        "options": {
+          "timeMin": "={{ $now.startOf('day').toISO() }}",
+          "timeMax": "={{ $now.endOf('day').toISO() }}"
+        }
       },
-      "id": "f8b0c249-fd57-4b00-8c3c-cd9dc9737216",
-      "name": "Parser danych klienta i agenta",
+      "id": "d7a92a5f-d1bb-46db-bd96-9a98faed2c2b",
+      "name": "Kalendarz Jakub",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.1,
+      "position": [-1024, -208],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "fus5VXkzCPpHSzA6",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsuje spotkania ze wszystkich 3 kalendarzy (Hubert, Wiktoria, Jakub).\n// Format tytulu: \"ACQ, Maciej, 111222333, Głowackiego 7\"\n// Agent = nazwa kalendarza Google (organizer.displayName)\n\nconst results = [];\n\nfor (const item of $input.all()) {\n  const summary = (item.json.summary || \"\").trim();\n  const parts = summary.split(\",\").map((s) => s.trim());\n\n  if (parts.length < 4) {\n    continue;\n  }\n\n  const agentName = (item.json.organizer?.displayName || \"\").trim();\n  if (!agentName) {\n    continue;\n  }\n\n  const scheduledTime = item.json.start?.dateTime || item.json.start?.date || \"\";\n  if (!scheduledTime) {\n    continue;\n  }\n\n  const phone = parts[2].replace(/\\s/g, \"\");\n  if (!phone) {\n    continue;\n  }\n\n  const startDate = new Date(scheduledTime);\n  const timeStr = startDate.toLocaleTimeString(\"pl-PL\", {\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    timeZone: \"Europe/Warsaw\",\n  });\n\n  results.push({\n    json: {\n      google_event_id: item.json.id,\n      scheduled_time: scheduledTime,\n      scheduled_at: scheduledTime,\n      client_name: parts[1],\n      phone: phone,\n      address_str: parts[3],\n      agent_name: agentName,\n      meeting_type: parts[0],\n      time_str: timeStr,\n    },\n  });\n}\n\nreturn results;"
+      },
+      "id": "394afec1-86ee-4a38-859d-86e823e40ce9",
+      "name": "Parsuj spotkania",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        -368,
-        0
-      ]
+      "position": [-720, 0]
     },
     {
       "parameters": {
@@ -106,35 +112,14 @@
         "url": "http://mcp-server:8080/tools/check_sms_status",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"google_event_id\": \"{{ $json.id }}\",\n  \"scheduled_time\": \"{{ $json.start.dateTime }}\",\n  \"sms_type\": \"REMINDER\"\n}",
+        "jsonBody": "={\n  \"google_event_id\": \"{{ $json.google_event_id }}\",\n  \"scheduled_time\": \"{{ $json.scheduled_time }}\",\n  \"sms_type\": \"REMINDER\"\n}",
         "options": {}
       },
       "id": "78dda5ce-d1a7-4cf7-a62e-4d5ef73cbb1d",
-      "name": "Sprawdź w bazie SQLite",
+      "name": "Sprawdz czy SMS juz wyslany",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [
-        -144,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://mcp-server:8080/tools/mock_send_sms",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"google_event_id\": \"{{ $('Mapuj parametry').item.json.event_id }}\",\n  \"scheduled_time\": \"{{ $('Mapuj parametry').item.json.start_time }}\",\n  \"scheduled_at\": \"{{ $('Mapuj parametry').item.json.start_time }}\",\n  \"phone\": \"{{ $('Mapuj parametry').item.json.phone }}\",\n  \"client_name\": \"{{ $('Mapuj parametry').item.json.client_name }}\",\n  \"time_str\": \"{{ new Date($('Mapuj parametry').item.json.start_time).toLocaleTimeString('pl-PL', {hour: '2-digit', minute:'2-digit', timeZone: 'Europe/Warsaw'}) }}\",\n  \"address_str\": \"{{ $('Mapuj parametry').item.json.address }}\",\n  \"agent_name\": \"{{ $('Mapuj parametry').item.json.agent_name }}\",\n  \"sms_type\": \"REMINDER\"\n}",
-        "options": {}
-      },
-      "id": "c9524848-f92e-44ce-8fe0-782e2357c3c2",
-      "name": "Wyślij Mock SMS",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [
-        496,
-        0
-      ]
+      "position": [-480, 0]
     },
     {
       "parameters": {
@@ -163,77 +148,24 @@
       },
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
-      "position": [
-        144,
-        0
-      ],
+      "position": [-240, 0],
       "id": "26fa421e-cce0-444f-8f55-32ee2d5bb08e",
-      "name": "Filter"
+      "name": "Tylko niewyslane"
     },
     {
       "parameters": {
-        "jsCode": "// Rozdzielamy tytuł po znaku przecinka\nfor (const item of $input.all()) {\n  const summary = item.json.summary || \"\";\n  \n  // Splitujemy tekst po przecinku i usuwamy białe znaki\n  const parts = summary.split(',').map(s => s.trim());\n\n  if (parts.length >= 4) {\n    item.json.meeting_type = parts[0];\n    item.json.client_name = parts[1];\n    item.json.phone = parts[2];\n    item.json.address = parts[3];\n  } else {\n    // Fallback: jeśli wpiszesz coś źle, żeby workflow się nie wywalił\n    item.json.meeting_type = \"Brak\";\n    item.json.client_name = summary;\n  }\n\n  // Nazwa kalendarza Google = imie agenta (np. Hubert, Wiktoria, Jakub)\n  item.json.agent_name = item.json.organizer?.displayName || \"\";\n}\n\nreturn $input.all();"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -816,
-        0
-      ],
-      "id": "394afec1-86ee-4a38-859d-86e823e40ce9",
-      "name": "Code in JavaScript"
-    },
-    {
-      "parameters": {
-        "operation": "getAll",
-        "calendar": {
-          "__rl": true,
-          "value": "96e3daa8406aa28d1ac409213099e7ac4fed7722a7750ce9f66a9cbc25a64c8d@group.calendar.google.com",
-          "mode": "list",
-          "cachedResultName": "Wiktoria"
-        },
+        "method": "POST",
+        "url": "http://mcp-server:8080/tools/mock_send_sms",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"google_event_id\": \"{{ $('Parsuj spotkania').item.json.google_event_id }}\",\n  \"scheduled_time\": \"{{ $('Parsuj spotkania').item.json.scheduled_time }}\",\n  \"scheduled_at\": \"{{ $('Parsuj spotkania').item.json.scheduled_at }}\",\n  \"phone\": \"{{ $('Parsuj spotkania').item.json.phone }}\",\n  \"client_name\": \"{{ $('Parsuj spotkania').item.json.client_name }}\",\n  \"time_str\": \"{{ $('Parsuj spotkania').item.json.time_str }}\",\n  \"address_str\": \"{{ $('Parsuj spotkania').item.json.address_str }}\",\n  \"agent_name\": \"{{ $('Parsuj spotkania').item.json.agent_name }}\",\n  \"sms_type\": \"REMINDER\"\n}",
         "options": {}
       },
-      "id": "24370a31-284e-419e-b69b-2115c0fd1d24",
-      "name": "Pobierz dzisiejsze spotkania1",
-      "type": "n8n-nodes-base.googleCalendar",
-      "typeVersion": 1.1,
-      "position": [
-        -1024,
-        208
-      ],
-      "credentials": {
-        "googleCalendarOAuth2Api": {
-          "id": "fus5VXkzCPpHSzA6",
-          "name": "Google Calendar account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "getAll",
-        "calendar": {
-          "__rl": true,
-          "value": "40b798fe606a7e6fd282aa973afe976bec7e3d51aa85862bd17db569a82c9591@group.calendar.google.com",
-          "mode": "list",
-          "cachedResultName": "Jakub"
-        },
-        "options": {}
-      },
-      "id": "d7a92a5f-d1bb-46db-bd96-9a98faed2c2b",
-      "name": "Pobierz dzisiejsze spotkania2",
-      "type": "n8n-nodes-base.googleCalendar",
-      "typeVersion": 1.1,
-      "position": [
-        -1024,
-        -176
-      ],
-      "credentials": {
-        "googleCalendarOAuth2Api": {
-          "id": "fus5VXkzCPpHSzA6",
-          "name": "Google Calendar account"
-        }
-      }
+      "id": "c9524848-f92e-44ce-8fe0-782e2357c3c2",
+      "name": "Wyslij Mock SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [0, 0]
     }
   ],
   "connections": {
@@ -241,105 +173,83 @@
       "main": [
         [
           {
-            "node": "Pobierz dzisiejsze spotkania1",
+            "node": "Kalendarz Hubert",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Pobierz dzisiejsze spotkania",
+            "node": "Kalendarz Wiktoria",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Pobierz dzisiejsze spotkania2",
+            "node": "Kalendarz Jakub",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Pobierz dzisiejsze spotkania": {
+    "Kalendarz Hubert": {
       "main": [
         [
           {
-            "node": "Code in JavaScript",
+            "node": "Parsuj spotkania",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Mapuj parametry": {
+    "Kalendarz Wiktoria": {
       "main": [
         [
           {
-            "node": "Parser danych klienta i agenta",
+            "node": "Parsuj spotkania",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parser danych klienta i agenta": {
+    "Kalendarz Jakub": {
       "main": [
         [
           {
-            "node": "Sprawdź w bazie SQLite",
+            "node": "Parsuj spotkania",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Sprawdź w bazie SQLite": {
+    "Parsuj spotkania": {
       "main": [
         [
           {
-            "node": "Filter",
+            "node": "Sprawdz czy SMS juz wyslany",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Filter": {
+    "Sprawdz czy SMS juz wyslany": {
       "main": [
         [
           {
-            "node": "Wyślij Mock SMS",
+            "node": "Tylko niewyslane",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code in JavaScript": {
+    "Tylko niewyslane": {
       "main": [
         [
           {
-            "node": "Mapuj parametry",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Pobierz dzisiejsze spotkania1": {
-      "main": [
-        [
-          {
-            "node": "Code in JavaScript",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Pobierz dzisiejsze spotkania2": {
-      "main": [
-        [
-          {
-            "node": "Code in JavaScript",
+            "node": "Wyslij Mock SMS",
             "type": "main",
             "index": 0
           }
