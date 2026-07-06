@@ -98,23 +98,86 @@
     },
     {
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "agent-hubert",
+              "name": "agent_name",
+              "value": "Hubert",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "set-hubert-agent",
+      "name": "Agent Hubert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-816, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "agent-wiktoria",
+              "name": "agent_name",
+              "value": "Wiktoria",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "set-wiktoria-agent",
+      "name": "Agent Wiktoria",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-816, 208]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "agent-jakub",
+              "name": "agent_name",
+              "value": "Jakub",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "set-jakub-agent",
+      "name": "Agent Jakub",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-816, -208]
+    },
+    {
+      "parameters": {
         "mode": "append"
       },
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "name": "Polacz kalendarze",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
-      "position": [-816, 0]
+      "position": [-608, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Parsuje spotkania ze wszystkich 3 kalendarzy.\n// Format tytulu: \"ACQ, Maciej, 111222333, Głowackiego 7\"\n// Agent = nazwa kalendarza Google (organizer.displayName)\n\nconst results = [];\n\nfor (const item of $input.all()) {\n  const summary = (item.json.summary || \"\").trim();\n  const parts = summary.split(\",\").map((s) => s.trim());\n\n  if (parts.length < 4) {\n    continue;\n  }\n\n  const agentName = (item.json.organizer?.displayName || \"\").trim();\n  if (!agentName) {\n    continue;\n  }\n\n  const scheduledTime = item.json.start?.dateTime || item.json.start?.date || \"\";\n  if (!scheduledTime) {\n    continue;\n  }\n\n  const phone = parts[2].replace(/\\s/g, \"\");\n  if (!phone) {\n    continue;\n  }\n\n  const startDate = new Date(scheduledTime);\n  const timeStr = startDate.toLocaleTimeString(\"pl-PL\", {\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    timeZone: \"Europe/Warsaw\",\n  });\n\n  results.push({\n    json: {\n      google_event_id: item.json.id,\n      scheduled_time: scheduledTime,\n      scheduled_at: scheduledTime,\n      client_name: parts[1],\n      phone: phone,\n      address_str: parts[3],\n      agent_name: agentName,\n      meeting_type: parts[0],\n      time_str: timeStr,\n    },\n  });\n}\n\nreturn results;"
+        "jsCode": "// Format tytulu: \"ACQ, Maciej, 111222333, Głowackiego 7\"\n// agent_name ustawiany wczesniej przez node Set per kalendarz\n\nconst results = [];\n\nfor (const item of $input.all()) {\n  const summary = (item.json.summary || \"\").trim();\n  const parts = summary.split(\",\").map((s) => s.trim());\n\n  if (parts.length < 4) {\n    continue;\n  }\n\n  const agentName = (item.json.agent_name || \"\").trim();\n  if (!agentName) {\n    continue;\n  }\n\n  const scheduledTime = item.json.start?.dateTime || item.json.start?.date || \"\";\n  if (!scheduledTime) {\n    continue;\n  }\n\n  const phone = parts[2].replace(/\\s/g, \"\");\n  if (!phone) {\n    continue;\n  }\n\n  const startDate = new Date(scheduledTime);\n  const timeStr = startDate.toLocaleTimeString(\"pl-PL\", {\n    hour: \"2-digit\",\n    minute: \"2-digit\",\n    timeZone: \"Europe/Warsaw\",\n  });\n\n  results.push({\n    json: {\n      google_event_id: item.json.id,\n      scheduled_time: scheduledTime,\n      scheduled_at: scheduledTime,\n      client_name: parts[1],\n      phone: phone,\n      address_str: parts[3],\n      agent_name: agentName,\n      meeting_type: parts[0],\n      time_str: timeStr,\n    },\n  });\n}\n\nreturn results;"
       },
       "id": "394afec1-86ee-4a38-859d-86e823e40ce9",
       "name": "Parsuj spotkania",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-592, 0]
+      "position": [-384, 0]
     },
     {
       "parameters": {
@@ -129,7 +192,7 @@
       "name": "Wyslij Mock SMS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
-      "position": [-320, 0]
+      "position": [-160, 0]
     }
   ],
   "connections": {
@@ -158,7 +221,7 @@
       "main": [
         [
           {
-            "node": "Polacz kalendarze",
+            "node": "Agent Hubert",
             "type": "main",
             "index": 0
           }
@@ -169,9 +232,9 @@
       "main": [
         [
           {
-            "node": "Polacz kalendarze",
+            "node": "Agent Wiktoria",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -180,9 +243,42 @@
       "main": [
         [
           {
+            "node": "Agent Jakub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Hubert": {
+      "main": [
+        [
+          {
             "node": "Polacz kalendarze",
             "type": "main",
-            "index": 2
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Wiktoria": {
+      "main": [
+        [
+          {
+            "node": "Polacz kalendarze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Jakub": {
+      "main": [
+        [
+          {
+            "node": "Polacz kalendarze",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
