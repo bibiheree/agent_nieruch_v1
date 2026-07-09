@@ -1,72 +1,78 @@
-version: '3.8'
-
 services:
-  # Produkcyjna baza danych dla n8n - zapobiega blokadom przy operacjach OCR
   postgres:
     image: postgres:16-alpine
     container_name: n8n-postgres
     restart: always
+
     environment:
-      - POSTGRES_USER=n8n_admin
-      - POSTGRES_PASSWORD=ProRealEstateSecure2026_ChangeMe!
-      - POSTGRES_DB=n8n_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U n8n_admin -d n8n_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
     networks:
       - real-estate-network
 
-  # Silnik automatyzacji n8n z licencją Community i zabezpieczeniami
   n8n:
-    image: n8nio/n8n:2.23.4
+    image: n8nio/n8n:latest
     container_name: n8n-local
     restart: always
+
     ports:
       - "5678:5678"
+
     depends_on:
       postgres:
         condition: service_healthy
+
     environment:
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - NODE_ENV=production
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Europe/Warsaw
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: ${N8N_PORT}
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      NODE_ENV: production
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
 
-      # Klucz szyfrujący credentiale w bazie n8n
-      - N8N_ENCRYPTION_KEY=Tecnocasa_Secure_Automation_Key_2026_XYZ_DoNotChange
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
 
-      # Połączenie z bazą Postgres
-      - DB_TYPE=postgresdb
-      - DB_POSTGRESDB_HOST=postgres
-      - DB_POSTGRESDB_PORT=5432
-      - DB_POSTGRESDB_DATABASE=n8n_db
-      - DB_POSTGRESDB_USER=n8n_admin
-      - DB_POSTGRESDB_PASSWORD=ProRealEstateSecure2026_ChangeMe!
-      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+
     volumes:
       - ./n8n_data:/home/node/.n8n
       - ./data:/data
+
     networks:
       - real-estate-network
 
-  # Serwer MCP (Python + FastMCP) komunikujący się lokalnie z n8n
   mcp-server:
     build: .
     container_name: mcp-server
     restart: always
+
     ports:
       - "8080:8080"
+
     volumes:
-      # Mapowanie folderu danych, gdzie Python zapisuje i odczytuje app.db
       - ./data:/app/data
+
     environment:
-      - PYTHONUNBUFFERED=1
+      PYTHONUNBUFFERED: "1"
+
     networks:
       - real-estate-network
 

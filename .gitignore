@@ -1,8 +1,10 @@
 # Środowisko i hasła
 .venv/
 .env
+.env.*
+!.env.example
 
-# Bazy danych i logi n8n
+# Bazy danych i dane lokalne
 data/*.db
 data/*.db-*
 n8n_data/
@@ -12,4 +14,10 @@ postgres_data/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# IDE / edytory
+.idea/
+.vscode/
+
+# Inne
 .cursor/
