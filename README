@@ -1,5 +1,10 @@
 # Real Estate SMS Automation
 
+Projekt jest prototypem/MVP przygotowanym w celu zaprezentowania koncepcji automatyzacji obsługi spotkań 
+nieruchomościowych. Nie jest jeszcze przygotowany do wdrożenia produkcyjnego 
+— wymaga m.in. pełnej autoryzacji API, migracji bazy danych, testów automatycznych 
+oraz integracji z rzeczywistą bramką SMS.
+
 ## Co robi projekt
 Automatyzuje przypomnienia SMS dla spotkań z Google Calendar przez n8n i lokalny serwer MCP/FastAPI.
 
