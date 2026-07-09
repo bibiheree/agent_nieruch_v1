@@ -1,0 +1,19 @@
+# Real Estate SMS Automation
+
+## Co robi projekt
+Automatyzuje przypomnienia SMS dla spotkań z Google Calendar przez n8n i lokalny serwer MCP/FastAPI.
+
+## Architektura
+Google Calendar -> n8n -> MCP API -> SQLite -> mock SMS/DLR
+
+## Uruchomienie
+cp .env.example .env
+docker compose up --build
+
+## Seed bazy
+docker compose exec mcp-server uv run src/my_mcp/db/seed.py
+
+## Endpointy
+GET /tools/agents
+GET /tools/properties
+POST /tools/mock_send_sms
